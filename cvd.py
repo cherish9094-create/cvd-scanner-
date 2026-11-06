@@ -121,3 +121,5 @@ else:
     # Send working proof only once per day at 9:30
     if now.hour == 9 and now.minute < 35:
         send(f"✅ Scanner LIVE - Slot {slot+1}/7 Scanning {start}-{end} of {len(STOCKS)} stocks at {now.strftime('%I:%M %p')} - No breakout in this batch")
+        # always exit clean for GitHub
+print("Done")
