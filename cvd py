@@ -1,10 +1,16 @@
 import yfinance as yf, requests, pandas as pd
+
 TOKEN = "9102765194:AAEd_tiB_6v7AHP6Ymuy3jp-arUS4j7azIY"
 CHAT = "483927316"
+
 def send(msgs):
-    if not msgs: return
-    txt = "📊 CVD DIV\n\n" + "\n".join(msgs[:20])
+    if not msgs:
+        # send test so you know it ran
+        txt = "✅ Scanner ran - No divergence found right now"
+    else:
+        txt = "📊 CVD DIV\n\n" + "\n".join(msgs[:25])
     requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT, "text": txt})
+
 def get_div(price, cvd):
     if len(price) < 25: return None
     p_low_now, p_low_prev = price.iloc[-10:].min(), price.iloc[-20:-10].min()
@@ -13,13 +19,14 @@ def get_div(price, cvd):
     c_high_now, c_high_prev = cvd.iloc[-10:].max(), cvd.iloc[-20:-10].max()
     if p_low_now < p_low_prev and c_low_now > c_low_prev: return "BULL DIV 📈"
     if p_high_now > p_high_prev and c_high_now < c_high_prev: return "BEAR DIV 📉"
-    if p_low_now > p_low_prev and c_low_now < c_low_prev: return "HID BULL 🔥"
-    if p_high_now < p_high_prev and c_high_now > c_high_prev: return "HID BEAR ⚠️"
     return None
-df = pd.read_csv("https://archives.nseindia.com/content/indices/ind_nifty500list.csv")
-stocks = [s + ".NS" for s in df['Symbol'].tolist()]
+
+# Use top 100 stocks only - to avoid block
+stocks = ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","BHARTIARTL","ITC","KOTAKBANK","LT","BAJFINANCE","ASIANPAINT","AXISBANK","MARUTI","WIPRO","DMART","SUNPHARMA","TITAN","ULTRACEMCO","ONGC","NTPC","POWERGRID","M&M","HCLTECH","TATASTEEL","ADANIENT","JSWSTEEL","HINDALCO","VEDL","COALINDIA"]
+stocks = [s + ".NS" for s in stocks]
+
 found=[]
-for tf, per, inter in [("DAILY","30d","1d"),("HOURLY","10d","1h"),("15MIN","10d","15m")]:
+for tf, per, inter in [("DAILY","30d","1d"),("HOURLY","7d","1h")]:
     for s in stocks:
         try:
             d = yf.Ticker(s).history(period=per, interval=inter, auto_adjust=True)
@@ -28,4 +35,5 @@ for tf, per, inter in [("DAILY","30d","1d"),("HOURLY","10d","1h"),("15MIN","10d"
             sig=get_div(d['Close'], d['CVD'])
             if sig: found.append(f"{s.replace('.NS','')} - {sig} - {tf}")
         except: pass
-if found: send(found)
+
+send(found)
