@@ -1,0 +1,31 @@
+import yfinance as yf, requests, pandas as pd
+TOKEN = "9102765194:AAEd_tiB_6v7AHP6Ymuy3jp-arUS4j7azIY"
+CHAT = "483927316"
+def send(msgs):
+    if not msgs: return
+    txt = "📊 CVD DIV\n\n" + "\n".join(msgs[:20])
+    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT, "text": txt})
+def get_div(price, cvd):
+    if len(price) < 25: return None
+    p_low_now, p_low_prev = price.iloc[-10:].min(), price.iloc[-20:-10].min()
+    p_high_now, p_high_prev = price.iloc[-10:].max(), price.iloc[-20:-10].max()
+    c_low_now, c_low_prev = cvd.iloc[-10:].min(), cvd.iloc[-20:-10].min()
+    c_high_now, c_high_prev = cvd.iloc[-10:].max(), cvd.iloc[-20:-10].max()
+    if p_low_now < p_low_prev and c_low_now > c_low_prev: return "BULL DIV 📈"
+    if p_high_now > p_high_prev and c_high_now < c_high_prev: return "BEAR DIV 📉"
+    if p_low_now > p_low_prev and c_low_now < c_low_prev: return "HID BULL 🔥"
+    if p_high_now < p_high_prev and c_high_now > c_high_prev: return "HID BEAR ⚠️"
+    return None
+df = pd.read_csv("https://archives.nseindia.com/content/indices/ind_nifty500list.csv")
+stocks = [s + ".NS" for s in df['Symbol'].tolist()]
+found=[]
+for tf, per, inter in [("DAILY","30d","1d"),("HOURLY","10d","1h"),("15MIN","10d","15m")]:
+    for s in stocks:
+        try:
+            d = yf.Ticker(s).history(period=per, interval=inter, auto_adjust=True)
+            if len(d)<25: continue
+            d['CVD']=((d['Close']-d['Open'])*d['Volume']).cumsum()
+            sig=get_div(d['Close'], d['CVD'])
+            if sig: found.append(f"{s.replace('.NS','')} - {sig} - {tf}")
+        except: pass
+if found: send(found)
