@@ -3,7 +3,7 @@ name: CVD Scanner 501
 on:
   workflow_dispatch:
   schedule:
-    - cron: '0,30 4-10 * * 1-5'  # 9:30 AM to 3:30 PM IST (Mon-Fri)
+    - cron: '0,30 4-10 * * 1-5'
 
 jobs:
   scan:
@@ -15,21 +15,7 @@ jobs:
           python-version: '3.10'
       - name: Install deps
         run: |
-          pip install yfinance requests pandas lxml
+          pip install yfinance requests pandas
       - name: Run scanner
         run: |
-          python cvd.pyname: CVD Scanner
-on:
-  workflow_dispatch:
-  schedule:
-    - cron: '0,30 3-10 * * 1-5'
-jobs:
-  scan:
-    runs-on: ubuntu-latest
-    steps:
-      - uses: actions/checkout@v4
-      - uses: actions/setup-python@v5
-        with:
-          python-version: '3.10'
-      - run: pip install yfinance pandas requests
-      - run: python cvd.py
+          python cvd.py
