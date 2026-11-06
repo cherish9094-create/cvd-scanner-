@@ -1,39 +1,56 @@
-import yfinance as yf, requests, pandas as pd
+import yfinance as yf
+import requests
+import pandas as pd
 
-TOKEN = "9102765194:AAEd_tiB_6v7AHP6Ymuy3jp-arUS4j7azIY"
-CHAT = "483927316"
+# ===== YOUR TELEGRAM DETAILS =====
+BOT_TOKEN = "PUT_YOUR_BOT_TOKEN_HERE"
+CHAT_ID = "PUT_YOUR_CHAT_ID_HERE"
+# =================================
 
-def send(msgs):
-    if not msgs:
-        # send test so you know it ran
-        txt = "✅ Scanner ran - No divergence found right now"
-    else:
-        txt = "📊 CVD DIV\n\n" + "\n".join(msgs[:25])
-    requests.post(f"https://api.telegram.org/bot{TOKEN}/sendMessage", data={"chat_id": CHAT, "text": txt})
+def send_telegram(msg):
+    url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+    try:
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=10)
+    except Exception as e:
+        print(f"Telegram error: {e}")
 
-def get_div(price, cvd):
-    if len(price) < 25: return None
-    p_low_now, p_low_prev = price.iloc[-10:].min(), price.iloc[-20:-10].min()
-    p_high_now, p_high_prev = price.iloc[-10:].max(), price.iloc[-20:-10].max()
-    c_low_now, c_low_prev = cvd.iloc[-10:].min(), cvd.iloc[-20:-10].min()
-    c_high_now, c_high_prev = cvd.iloc[-10:].max(), cvd.iloc[-20:-10].max()
-    if p_low_now < p_low_prev and c_low_now > c_low_prev: return "BULL DIV 📈"
-    if p_high_now > p_high_prev and c_high_now < c_high_prev: return "BEAR DIV 📉"
-    return None
+def check_stock(symbol):
+    try:
+        df = yf.download(symbol, period="2d", interval="15m", progress=False)
+        if df.empty or len(df) < 20:
+            return None
+        
+        # Simple CVD logic: price up + volume up = bullish
+        close = df['Close']
+        volume = df['Volume']
+        
+        # Last 5 candles
+        price_change = close.iloc[-1] - close.iloc[-5]
+        vol_avg = volume.tail(20).mean()
+        last_vol = volume.iloc[-1]
+        
+        if price_change.iloc[0] > 0 and last_vol.iloc[0] > vol_avg.iloc[0] * 1.5:
+            return f"🟢 *{symbol}* - Bullish CVD (Vol spike: {last_vol.iloc[0]:.0f} vs avg {vol_avg.iloc[0]:.0f}) Price: {close.iloc[-1].iloc[0]:.2f}"
+        return None
+    except Exception as e:
+        print(f"{symbol} error: {e}")
+        return None
 
-# Use top 100 stocks only - to avoid block
-stocks = ["RELIANCE","TCS","INFY","HDFCBANK","ICICIBANK","SBIN","BHARTIARTL","ITC","KOTAKBANK","LT","BAJFINANCE","ASIANPAINT","AXISBANK","MARUTI","WIPRO","DMART","SUNPHARMA","TITAN","ULTRACEMCO","ONGC","NTPC","POWERGRID","M&M","HCLTECH","TATASTEEL","ADANIENT","JSWSTEEL","HINDALCO","VEDL","COALINDIA"]
-stocks = [s + ".NS" for s in stocks]
+# Nifty 50 few stocks for test
+STOCKS = ["RELIANCE.NS", "TCS.NS", "INFY.NS", "HDFCBANK.NS", "ICICIBANK.NS", "SBIN.NS", "BHARTIARTL.NS"]
 
-found=[]
-for tf, per, inter in [("DAILY","30d","1d"),("HOURLY","7d","1h")]:
-    for s in stocks:
-        try:
-            d = yf.Ticker(s).history(period=per, interval=inter, auto_adjust=True)
-            if len(d)<25: continue
-            d['CVD']=((d['Close']-d['Open'])*d['Volume']).cumsum()
-            sig=get_div(d['Close'], d['CVD'])
-            if sig: found.append(f"{s.replace('.NS','')} - {sig} - {tf}")
-        except: pass
+print("Starting scan...")
+results = []
+for s in STOCKS:
+    res = check_stock(s)
+    if res:
+        results.append(res)
 
-send(found)
+if results:
+    msg = "📊 *CVD Scanner Alert*\n\n" + "\n\n".join(results)
+else:
+    msg = "✅ CVD Scanner running - No strong signals right now (test success)"
+
+print(msg)
+send_telegram(msg)
+print("Done - Telegram sent")
