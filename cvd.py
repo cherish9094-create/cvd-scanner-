@@ -1,4 +1,134 @@
 import yfinance as yf
+import pandas as pd
+import requests
+import time
+from datetime import datetime
+
+BOT_TOKEN = "9102765194:AAEd_tiB_6v7AHP6Ymuy3jp-arUS4j7azIY"
+CHAT_ID = "483927316"
+
+def send(msg):
+    try:
+        url = f"https://api.telegram.org/bot{BOT_TOKEN}/sendMessage"
+        requests.post(url, data={"chat_id": CHAT_ID, "text": msg, "parse_mode": "Markdown"}, timeout=15)
+        print("Telegram sent")
+    except Exception as e:
+        print(f"Telegram error: {e}")
+
+def calc_cvd(df):
+    # Chaikin Money Flow Volume as CVD proxy (works on 15m without tick data)
+    # MF Multiplier = ((Close-Low)-(High-Close))/(High-Low)
+    # MFV = Multiplier * Volume, CVD = Cumsum(MFV)
+    try:
+        high_low = df['High'] - df['Low']
+        high_low = high_low.replace(0, 0.001)
+        mfm = ((df['Close'] - df['Low']) - (df['High'] - df['Close'])) / high_low
+        mfv = mfm * df['Volume']
+        cvd = mfv.cumsum()
+        return cvd
+    except:
+        return df['Volume'].cumsum() * 0.01
+
+def detect_divergence(df):
+    # Need 60 candles of 15m = 2 days
+    if len(df) < 50:
+        return None
+    
+    close = df['Close'].values
+    cvd = df['CVD'].values
+    
+    # Find last 2 swing lows (20 bars apart)
+    # Simple method: recent low vs previous low
+    try:
+        # Last 40 candles split in 2 halves
+        mid = len(close)//2
+        # Recent swing
+        recent_low_price = min(close[-15:])
+        recent_low_cvd = min(cvd[-15:])
+        recent_low_idx = -15 + list(close[-15:]).index(recent_low_price)
+        
+        prev_low_price = min(close[mid-20:mid])
+        prev_low_cvd = min(cvd[mid-20:mid])
+        
+        recent_high_price = max(close[-15:])
+        recent_high_cvd = max(cvd[-15:])
+        
+        prev_high_price = max(close[mid-20:mid])
+        prev_high_cvd = max(cvd[mid-20:mid])
+        
+        # 1. Regular Bullish: Price LL, CVD HL
+        if recent_low_price < prev_low_price * 0.998 and recent_low_cvd > prev_low_cvd:
+            return "🔥 REG BULLISH", f"Price LL {prev_low_price:.1f}->{recent_low_price:.1f} but CVD HL"
+        
+        # 2. Regular Bearish: Price HH, CVD LH
+        if recent_high_price > prev_high_price * 1.002 and recent_high_cvd < prev_high_cvd:
+            return "💀 REG BEARISH", f"Price HH {prev_high_price:.1f}->{recent_high_price:.1f} but CVD LH"
+        
+        # 3. Hidden Bullish: Price HL, CVD LL (continuation)
+        if recent_low_price > prev_low_price * 1.002 and recent_low_cvd < prev_low_cvd:
+            return "🚀 HIDDEN BULLISH", f"Price HL but CVD LL - Strong Uptrend Cont."
+        
+        # 4. Hidden Bearish: Price LH, CVD HH
+        if recent_high_price < prev_high_price * 0.998 and recent_high_cvd > prev_high_cvd:
+            return "⚠️ HIDDEN BEARISH", f"Price LH but CVD HH - Strong Downtrend Cont."
+            
+    except Exception as e:
+        print(f"Detect error: {e}")
+    
+    return None
+
+# ========= MAIN =========
+print("CVD 4-Type Screener Starting...")
+now = datetime.now()
+
+# Weekend guard - Market closed Sat/Sun = Green tick only
+if now.weekday() >= 5:
+    send(f"✅ *CVD 4-Type Scanner LIVE* (Weekend)\nMarket Closed - No scan today\nReady for Monday\nTime: {now.strftime('%a %d %b %I:%M %p')}")
+    print("Weekend - exit clean")
+    exit(0)
+
+STOCKS = ["RELIANCE.NS","TCS.NS","HDFCBANK.NS","ICICIBANK.NS","INFY.NS","BHARTIARTL.NS","SBIN.NS","LICI.NS","ITC.NS","HINDUNILVR.NS","LT.NS","BAJFINANCE.NS","MARUTI.NS","KOTAKBANK.NS","AXISBANK.NS","ASIANPAINT.NS","SUNPHARMA.NS","TITAN.NS","ULTRACEMCO.NS","WIPRO.NS","ADANIENT.NS","ADANIPORTS.NS","APOLLOHOSP.NS","BAJAJ-AUTO.NS","BAJAJFINSV.NS","BPCL.NS","BRITANNIA.NS","CIPLA.NS","COALINDIA.NS","DIVISLAB.NS","DRREDDY.NS","EICHERMOT.NS","GRASIM.NS","HCLTECH.NS","HDFCLIFE.NS","HEROMOTOCO.NS","HINDALCO.NS","ICICIGI.NS","ICICIPRULI.NS","INDUSINDBK.NS","JSWSTEEL.NS","M&M.NS","NESTLEIND.NS","NTPC.NS","ONGC.NS","POWERGRID.NS","SBILIFE.NS","SHRIRAMFIN.NS","TATACONSUM.NS","TATAMOTORS.NS","TATASTEEL.NS","TECHM.NS","TRENT.NS","VEDL.NS","ADANIGREEN.NS","ADANIPOWER.NS","ATGL.NS","AMBUJACEM.NS","BANKBARODA.NS","BAJAJHLDNG.NS","BANDHANBNK.NS","BERGEPAINT.NS","BHEL.NS","BIOCON.NS","BOSCHLTD.NS","CANBK.NS","CHOLAFIN.NS","DABUR.NS","DLF.NS","GAIL.NS","GODREJCP.NS","HAVELLS.NS","INDIGO.NS","INDIANB.NS","IOC.NS","IRCTC.NS","JINDALSTEL.NS","JIOFIN.NS","JSWENERGY.NS","LODHA.NS","LTIM.NS","LUPIN.NS","MUTHOOTFIN.NS","NAUKRI.NS","PIDILITIND.NS","PFC.NS","RECLTD.NS","SIEMENS.NS","TATAPOWER.NS","UPL.NS","ZOMATO.NS","ABB.NS","ABCAPITAL.NS","ABFRL.NS","ACC.NS","ALKEM.NS","ASHOKLEY.NS","ASTRAL.NS","AUROPHARMA.NS","BALKRISIND.NS","BATAINDIA.NS","BEL.NS","BHARATFORG.NS","CONCOR.NS","CUMMINSIND.NS","DIXON.NS","ESCORTS.NS","FEDERALBNK.NS","GMRINFRA.NS","GLENMARK.NS","GODREJPROP.NS","HAL.NS","HINDPETRO.NS","IDFCFIRSTB.NS","IGL.NS","INDHOTEL.NS","IRFC.NS","JUBLFOOD.NS","LICHSGFIN.NS","MANKIND.NS","MARICO.NS","MFSL.NS","MGL.NS","MPHASIS.NS","MRF.NS","NHPC.NS","NMDC.NS","OBEROIRLTY.NS","OFSS.NS","PAGEIND.NS","PERSISTENT.NS","PETRONET.NS","PHOENIXLTD.NS","POLYCAB.NS","PRESTIGE.NS","SAIL.NS","SHREECEM.NS","SRF.NS","SUNTV.NS","TATACHEM.NS","TORNTPHARM.NS","TVSMOTOR.NS","UNIONBANK.NS","VOLTAS.NS","ZYDUSLIFE.NS","SUZLON.NS","IDEA.NS","IREDA.NS","BSE.NS","MCX.NS","CGPOWER.NS","COCHINSHIP.NS","IRB.NS","VBL.NS"]
+
+# Auto-rotate: 75 stocks per 30min slot = 7 slots cover 500
+SLOT_SIZE = 75
+TOTAL_SLOTS = 7
+slot = (now.hour * 2 + now.minute // 30) % TOTAL_SLOTS
+start = slot * SLOT_SIZE
+end = min(start + SLOT_SIZE, len(STOCKS))
+BATCH = STOCKS[start:end]
+
+print(f"Slot {slot+1}/{TOTAL_SLOTS} scanning {len(BATCH)} stocks")
+
+alerts = []
+for sym in BATCH:
+    try:
+        df = yf.download(sym, period="2d", interval="15m", progress=False, auto_adjust=True)
+        if len(df) < 30:
+            continue
+        if isinstance(df.columns, pd.MultiIndex):
+            df.columns = df.columns.get_level_values(0)
+        
+        df['CVD'] = calc_cvd(df)
+        result = detect_divergence(df)
+        
+        if result:
+            div_type, detail = result
+            price = float(df['Close'].iloc[-1])
+            alerts.append(f"{div_type} *{sym}* @ {price:.1f}\n_{detail}_")
+            print(f"FOUND {sym} {div_type}")
+        
+        time.sleep(0.2)
+    except Exception as e:
+        print(f"{sym} error: {e}")
+        continue
+
+if alerts:
+    msg = f"🎯 *CVD 4-Type Divergence* Slot {slot+1}/7\nTime: {now.strftime('%d %b %I:%M %p')}\n\n" + "\n\n".join(alerts[:10])
+    send(msg)
+else:
+    send(f"✅ *CVD 4-Type LIVE* Slot {slot+1}/7\nScanned {len(BATCH)} stocks\nNo divergence in this slot\nNext slot in 30 min")
+
+print("Done - Clean exit")import yfinance as yf
 import requests
 import time
 import pandas as pd
