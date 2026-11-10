@@ -1,0 +1,20 @@
+name: CVD Scanner
+on:
+  schedule:
+    - cron: '30 3 * * 1-5'
+  workflow_dispatch:
+jobs:
+  scan:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v3
+      - uses: actions/setup-python@v4
+        with:
+          python-version: '3.9'
+      - name: Install deps
+        run: pip install yfinance pandas pytz requests
+      - name: Run Scanner
+        env:
+          BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
+          CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python cvd.py
