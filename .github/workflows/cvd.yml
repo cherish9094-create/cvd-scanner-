@@ -1,10 +1,9 @@
 name: CVD Daily 9AM
 on:
-    schedule:
-        - cron: '45 3 * * 1-5'
-        - cron: '0 10 * * 1-5'
+  schedule:
+    - cron: '45 3 * * 1-5'
+    - cron: '0 10 * * 1-5'
   workflow_dispatch:
-
 jobs:
   scan:
     runs-on: ubuntu-latest
@@ -13,8 +12,8 @@ jobs:
       - uses: actions/setup-python@v5
         with:
           python-version: '3.11'
-      - run: pip install yfinance requests pandas
-      - run: python cvd.py
-        env:
+      - run: pip install yfinance requests
+      - env:
           BOT_TOKEN: ${{ secrets.BOT_TOKEN }}
           CHAT_ID: ${{ secrets.CHAT_ID }}
+        run: python CVD.py
